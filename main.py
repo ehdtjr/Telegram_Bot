@@ -7,6 +7,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from telegram.constants import ParseMode, ChatAction
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime
+import json
 
 # .env 파일을 로드합니다.
 load_dotenv()
@@ -44,12 +45,28 @@ def get_translated_quote():
 
     return translated_quote_text, translated_quote_author
 
-# 봇의 /start 명령에 대한 핸들러 함수
-chat_ids = set()
+# chat_ids를 파일에 저장하는 함수
+def save_chat_ids():
+    with open('chat_ids.json', 'w') as file:
+        json.dump(list(chat_ids), file)
 
+# 파일에서 chat_ids를 로드하는 함수
+def load_chat_ids():
+    global chat_ids
+    try:
+        with open('chat_ids.json', 'r') as file:
+            chat_ids = set(json.load(file))
+    except FileNotFoundError:
+        chat_ids = set()
+
+# 로드 함수 호출 후 chat_ids 초기화
+load_chat_ids()
+
+# 봇의 /start 명령에 대한 핸들러 함수
 async def start(update, context):
     chat_id = update.effective_chat.id
     chat_ids.add(chat_id)
+    save_chat_ids()  # chat_ids 저장
     await context.bot.send_message(
         chat_id=chat_id, text="안녕하세요, Daily 챗봇입니다! 🧑‍💻"
     )
@@ -70,9 +87,10 @@ async def send_daily_quote(context):
                         parse_mode=ParseMode.MARKDOWN_V2,
                     )
     except Exception as e:
-        await context.bot.send_message(
-            chat_id=chat_id, text=f"오류가 발생했습니다: {str(e)}"
-        )
+        for chat_id in chat_ids:
+            await context.bot.send_message(
+                chat_id=chat_id, text=f"오류가 발생했습니다: {str(e)}"
+            )
 
 # 사용자 메시지 핸들러 함수
 async def chat_bot(update, context):
@@ -126,7 +144,7 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_bot
 
 # 스케줄러 설정
 scheduler = AsyncIOScheduler()
-scheduler.add_job(send_daily_quote, 'cron', hour=8, args=[application])
+scheduler.add_job(send_daily_quote, 'cron', hour=13, args=[application])
 scheduler.start()
 
 # 봇 실행
